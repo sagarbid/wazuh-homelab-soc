@@ -1,0 +1,77 @@
+# Wazuh Manager Configuration Reference
+# Location on Ubuntu Server: /var/ossec/etc/ossec.conf
+# This is an anonymised reference — do not use directly in production without review.
+
+global:
+  email_notification: 'no'
+  logall: 'no'
+  logall_json: 'no'
+  integrity_checking: 300
+  rootkit_detection: 720
+  host_information: 720
+
+alerts:
+  log_alert_level: 3
+  email_alert_level: 12
+
+# Remote agent communication
+remote:
+  - connection: secure
+    port: 1514
+    protocol: tcp
+    queue_size: 131072
+
+# Wazuh API
+api:
+  https: 'yes'
+
+# Vulnerability detection
+vulnerability-detector:
+  enabled: 'yes'
+  interval: '5m'
+  min_full_scan_interval: '6h'
+  run_on_start: 'yes'
+  provider:
+    - name: canonical
+      enabled: 'yes'
+      os:
+        - xenial
+        - bionic
+        - focal
+        - jammy
+      update_interval: '1h'
+
+# File integrity monitoring (FIM) — monitored directories
+syscheck:
+  frequency: 43200         # Every 12 hours
+  scan_on_start: 'yes'
+  auto_ignore: 'no'
+  directories:
+    - path: /etc
+      realtime: 'yes'
+    - path: /usr/bin
+    - path: /usr/sbin
+    - path: /bin
+    - path: /sbin
+  ignore:
+    - path: /etc/mtab
+    - path: /etc/hosts.deny
+    - path: /etc/mail/statistics
+    - path: /etc/random-seed
+    - path: /etc/adjtime
+
+# Log analysis — monitored log files
+localfile:
+  - log_format: syslog
+    location: /var/log/auth.log
+  - log_format: syslog
+    location: /var/log/syslog
+  - log_format: command
+    command: df -P
+    frequency: 360
+
+# Active response — auto-block brute force
+active-response:
+  disabled: 'no'
+  ca_store: 'etc/wpk_root.pem'
+  ca_verification: 'yes'
