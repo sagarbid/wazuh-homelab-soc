@@ -44,7 +44,7 @@ check_prereqs() {
     exit 1
   fi
 
-  for tool in nmap nc logger; do
+  for tool in nmap nc logger sshpass; do
     if ! command -v "$tool" &>/dev/null; then
       info "Installing $tool..."
       apt-get install -y "$tool" &>/dev/null
@@ -81,13 +81,21 @@ test_port_scan() {
 
 test_failed_ssh() {
   info "Test 2: SSH Failed Logins (MITRE T1110 — Brute Force)"
-  info "Generating 5 failed SSH attempts..."
+  info "Generating 5 failed SSH password attempts..."
 
+  # NOTE: an earlier version of this test used `-o PasswordAuthentication=no`,
+  # which makes the SSH *client* refuse to offer a password at all — it fails
+  # client-side before ever sending a guess to the server, so it likely never
+  # generated the real sshd "Failed password" telemetry this test claims to
+  # produce. Using sshpass with a deliberately wrong password forces an actual
+  # password attempt the server has to reject and log.
   for i in {1..5}; do
-    ssh -o StrictHostKeyChecking=no \
-        -o ConnectTimeout=3 \
-        -o PasswordAuthentication=no \
-        "nonexistentuser_soc_test@${MANAGER_IP}" 2>/dev/null || true
+    sshpass -p "wrong_password_soc_test_${i}" \
+      ssh -o StrictHostKeyChecking=no \
+          -o ConnectTimeout=3 \
+          -o PreferredAuthentications=password \
+          -o PubkeyAuthentication=no \
+          "nonexistentuser_soc_test@${MANAGER_IP}" exit 2>/dev/null || true
     sleep 0.5
   done
 

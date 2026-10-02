@@ -1,6 +1,6 @@
 # 🛡️ SOC Analyst Portfolio: Wazuh Homelab (Active Agent + Alerts)
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square&logo=github-actions)](https://github.com/sagarbid/wazuh-homelab-soc/actions)
+[![Docs](https://img.shields.io/badge/docs-auto--deployed-blue?style=flat-square&logo=github-actions)](https://github.com/sagarbid/wazuh-homelab-soc/actions)
 [![Deploy](https://img.shields.io/badge/deploy-GitHub%20Pages-blue?style=flat-square&logo=github)](https://sagarbid.github.io/wazuh-homelab-soc)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Wazuh](https://img.shields.io/badge/Wazuh-4.x-blue?style=flat-square&logo=wazuh)](https://wazuh.com)
@@ -251,20 +251,27 @@ sudo nmap -sV -p 22,443,1514,1515,55000 <MANAGER_IP>
 sudo nmap -sS -T4 <MANAGER_IP>
 ```
 
-Wazuh alert triggered: **Rule 533 — Nmap scan detected** (level 6)
+Wazuh alert triggered: **Rule 533** (level 6)
+
+> **Note:** Rule 533 fired during this specific build, but it's worth flagging that in Wazuh's stock ruleset, 533 is more commonly documented as a "listened ports status changed" rule rather than a dedicated Nmap-detection rule — the exact mapping can shift between Wazuh versions and whichever ruleset decoders are active. Before citing this rule ID in an interview, I'd confirm it against `/var/ossec/ruleset/rules/` on the live manager rather than relying on memory of this build.
 
 **5.2 SSH Brute Force — MITRE T1110 (Brute Force)**
 
 ```bash
-# Generate failed SSH authentication attempts
+# Generate failed SSH authentication attempts — sshpass forces a real
+# password attempt (see honesty note below) rather than a client-side refusal
 for i in {1..10}; do
-  ssh -o StrictHostKeyChecking=no \
-      -o ConnectTimeout=3 \
-      -o PasswordAuthentication=no \
-      baduser@<MANAGER_IP> 2>/dev/null || true
+  sshpass -p "wrong_password_${i}" \
+    ssh -o StrictHostKeyChecking=no \
+        -o ConnectTimeout=3 \
+        -o PreferredAuthentications=password \
+        -o PubkeyAuthentication=no \
+        baduser@<MANAGER_IP> exit 2>/dev/null || true
   sleep 0.5
 done
 ```
+
+> **Honesty note:** the first version of this test (and of `scripts/test-attacks.sh`) used `-o PasswordAuthentication=no`, which tells the SSH client to refuse password auth itself — it fails before ever sending a password guess to the server, so it likely wasn't generating genuine `sshd` failed-password log entries. The `sshpass` version above forces an actual (wrong) password attempt the server has to reject, which is what should be driving Rule 5763.
 
 Wazuh alert triggered: **Rule 5763 — Multiple failed SSH logins** (level 10)
 
@@ -441,7 +448,14 @@ The dashboard not loading (OpenSearch was still indexing), the agent showing Dis
 
 ### Security Certifications Become More Meaningful with Practical Context
 
-Concepts from CompTIA Security+ (defence in depth, log monitoring, incident response) and CySA+ (threat hunting, SIEM analysis, rule tuning) that were previously abstract became grounded in practice. I can now connect a certification objective to a specific command I ran or a specific alert I investigated. That connection is what transforms exam knowledge into job readiness — for roles at Big 4 banks, telcos like Telstra and Optus, Victorian Government agencies, and Managed Security Providers like CyberCX and Tesserent who all rely on SIEM tooling in their SOC operations.
+Concepts from CompTIA Security+ (defence in depth, log monitoring, incident response, SIEM fundamentals) that were previously abstract became grounded in practice. This lab is also the kind of hands-on SIEM/rule-tuning experience I'd want in place before attempting CySA+ next. I can now connect a certification objective to a specific command I ran or a specific alert I investigated. That connection is what transforms exam knowledge into job readiness — for roles at Big 4 banks, telcos like Telstra and Optus, Victorian Government agencies, and Managed Security Providers like CyberCX and Tesserent who all rely on SIEM tooling in their SOC operations.
+
+### What I'd Improve
+
+- **Verify every rule ID against the live ruleset**, not just what fired once during the build — flagged above for Rule 533, and worth doing for 5763/554/550/553 too before quoting them from memory in an interview.
+- **Fix the SSH brute-force test's methodology.** The original `test_failed_ssh()` passed `-o PasswordAuthentication=no`, which tells the SSH *client* to refuse password auth entirely — it fails on the client side before ever sending a password guess to the server, so it likely wasn't generating the same `sshd` failed-password telemetry a real brute-force attempt would. Fixed in this update (see `scripts/test-attacks.sh`) to use `sshpass` with a deliberately wrong password, so the server actually logs a failed password attempt.
+- **Add a baseline/noise test** — run the attack simulation against an *unconfigured* manager to show what doesn't get caught by default, then compare to the tuned ruleset. That contrast is more convincing than only showing the happy path.
+- **Capture the alert JSON itself** (not just dashboard screenshots) in the repo, so a reviewer can see the raw `rule.id` / `rule.description` fields rather than trusting the README's transcription of them.
 
 ---
 
